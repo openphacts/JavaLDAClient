@@ -1,5 +1,5 @@
 package model
-import java.net.URLEncoder
+import java.net.URLEncoder  
 import java.net.URL
 import java.io.OutputStreamWriter
 import org.apache.commons.io.IOUtils
