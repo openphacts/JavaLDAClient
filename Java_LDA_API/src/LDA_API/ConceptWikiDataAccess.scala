@@ -1,4 +1,4 @@
-package model
+package LDA_API
 import java.net.URLEncoder  
 import java.net.URL
 import java.io.OutputStreamWriter
