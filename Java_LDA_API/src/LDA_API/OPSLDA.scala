@@ -31,7 +31,7 @@ object OPSLDA {
 
   //Given an target identifier (concept wiki uri) returns information associated to the target
   //calling the 
-  def GetTargetInfo(targetURI: String) =
+  def GetTargetInfo(targetURI: String):Seq[Map[String,List[AnyRef]]]=
     {
       println("URI:" + targetURI)
       var urlcall = "http://api.openphacts.org/target?uri=" + URLEncoder.encode(targetURI, "UTF-8")
@@ -54,7 +54,7 @@ object OPSLDA {
         val res = for (elem <- exactMatch.value)
           yield (
           {
-            var mapMatch = Map[String, List[Object]]()
+            var mapMatch = Map[String, List[AnyRef]]()
             //elem is one exactMatch
             if (elem.isInstanceOf[JsObject]) {
 
@@ -96,7 +96,7 @@ object OPSLDA {
         val total = Seq(firstelem) ++ res
         total
       } else {
-        Map()
+        Seq()
       }
 
     }
