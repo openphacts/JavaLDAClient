@@ -4,14 +4,31 @@ import java.net.URL
 import java.io.OutputStreamWriter
 import org.apache.commons.io.IOUtils
 import java.io.StringWriter
-import scala.collection.mutable.LinkedList
 import play.api.libs.json.Json
 import play.api.libs.json.JsArray
 import play.api.libs.json.JsString
 import play.api.libs.json.JsObject
 import play.api.libs.json.JsValue
-	
-object ConceptWikiDataAccess {
+import java.util.{List=>JavaList}
+import java.util.{Map=>JavaMap}
+import collection.JavaConversions._
+
+object ConceptWikiDataAccessJava{
+  
+  def CW_Search_Protein(q:String,conceptwikiURL:String):JavaList[JavaMap[String, String]]= {
+    def convert(targetMap: Map[String,String]):JavaMap[String,String] ={
+    		collection.mutable.Map(targetMap.toSeq: _*)
+    }
+    (ConceptWikiDataAccessScala.CW_Search_Protein(q,conceptwikiURL)).map(convert)
+  }
+  def CW_Search_Compound(q:String,concepwikiURL:String):JavaList[JavaMap[String, String]]= {
+    def convert(targetMap: Map[String,String]):JavaMap[String,String] ={
+    		collection.mutable.Map(targetMap.toSeq: _*)
+    }
+    (ConceptWikiDataAccessScala.CW_Search_Compound(q,concepwikiURL)).map(convert)
+  }
+}
+object ConceptWikiDataAccessScala {
 
   
   private def OPSAPI_call(parameters: Map[String, String], urlcall: String) = {
@@ -30,8 +47,8 @@ object ConceptWikiDataAccess {
 
   }
 
-  private def process_matches(matchesString:String):LinkedList[Map[String, String]] = {
-    var matchesList = LinkedList[Map[String, String]]()
+  private def process_matches(matchesString:String) = {
+    var matchesList = List[collection.immutable.Map[String, String]]()
     var js = Json.parse(matchesString)
     var matches = js.asInstanceOf[JsArray]
 
@@ -55,7 +72,7 @@ object ConceptWikiDataAccess {
       }
       matchesList = matchesList :+ currentMatch
     }
-    matchesList    
+    matchesList   
   }
   
  
@@ -64,7 +81,7 @@ object ConceptWikiDataAccess {
     OPSAPI_call(parameters, conceptwikiURL+"/web-ws/concept/search/byTag/")
   }
   
-  def CW_Search_Protein(q:String,conceptwikiURL:String)= {
+  def CW_Search_Protein(q:String,conceptwikiURL:String):List[Map[String, String]]= {
     val r= CW_Search_Protein_RAW(q,conceptwikiURL)
     println(r)
     process_matches(r)
@@ -74,7 +91,7 @@ object ConceptWikiDataAccess {
     var parameters = Map( "uuid" -> "07a84994-e464-4bbf-812a-a4b96fa3d197","q" -> q)
     OPSAPI_call(parameters, concepwikiURL+"/web-ws/concept/search/byTag/")
   }
-  def CW_Search_Compound(q:String,concepwikiURL:String)= {
+  def CW_Search_Compound(q:String,concepwikiURL:String):List[Map[String, String]]= {
     process_matches(CW_Search_Compound_RAW(q,concepwikiURL))
   }
   

@@ -1,5 +1,8 @@
 package LDA_API
 
+import java.util.{List=>JavaList}
+import java.util.{Map=>JavaMap}
+import collection.JavaConversions._
 import play.api.libs.ws.WS
 import java.io.File
 import java.io.FileInputStream
@@ -27,14 +30,33 @@ import scala.collection.mutable.ArrayBuffer
 import play.api.libs.json.JsUndefined
 import play.api.libs.json.JsNumber
 
-object OPSLDA {
+object OPSLDAJava {
+
+  def GetTargetInfo(targetURI: String, coreAPIURL: String): JavaList[(String, String, String)] = {
+    OPSLDAScala.GetTargetInfo(targetURI, coreAPIURL)
+  }
+  def GetCompoundInfo(compoundURI: String, coreAPIURL: String): JavaList[(String, String, String)] = {
+    OPSLDAScala.GetCompoundInfo(compoundURI, coreAPIURL)
+  }
+  def GetPharmacologyByTargets(targetCwikiID: String, coreAPIURL: String): JavaList[JavaMap[String,String]]={
+    def convert(targetMap: Map[String,String]):JavaMap[String,String] ={
+      collection.mutable.Map(targetMap.toSeq: _*) 
+    }
+    val res = OPSLDAScala.GetPharmacologyByTargets(targetCwikiID,coreAPIURL)
+    res.map(convert )
+  }
+
+  
+}
+
+object OPSLDAScala {
 
   //Given an target identifier (concept wiki uri) returns information associated to the target
   //calling the 
-  def GetTargetInfo(targetURI: String,coreAPIURL:String): Seq[Map[String, List[AnyRef]]] =
+  def GetTargetInfo(targetURI: String, coreAPIURL: String): List[(String, String, String)] =
     {
       println("URI:" + targetURI)
-      var urlcall = coreAPIURL+"/target?uri=" + URLEncoder.encode(targetURI, "UTF-8")
+      var urlcall = coreAPIURL + "/target?uri=" + URLEncoder.encode(targetURI, "UTF-8")
       var url = new URL(urlcall);
       var conn = url.openConnection().asInstanceOf[HttpURLConnection]
       conn.setRequestMethod("GET")
@@ -50,63 +72,35 @@ object OPSLDA {
         val inDataset = (json \ "result" \ "primaryTopic" \ "inDataset").as[String]
         val prefLabel = (json \ "result" \ "primaryTopic" \ "prefLabel").as[String]
         val exactMatch: JsArray = (json \ "result" \ "primaryTopic" \ "exactMatch").asInstanceOf[JsArray]
-        val firstelem = Map("_about" -> List(List("Resource", about)), "inDataset" -> List(List("Resource", inDataset)), "prefLabel" -> List(List("Literal", prefLabel)))
-        val res = for (elem <- exactMatch.value)
+        //val firstelem = Map("_about" -> List(List("Resource", about)), "inDataset" -> List(List("Resource", inDataset)), "prefLabel" -> List(List("Literal", prefLabel)))
+        val firstelem = Seq((inDataset, "_about", about), (inDataset, "prefLabel", prefLabel))
+        val res = for (elem <- exactMatch.value if (elem.isInstanceOf[JsObject]))
           yield (
           {
-            var mapMatch = Map[String, List[AnyRef]]()
-            //elem is one exactMatch
-            if (elem.isInstanceOf[JsObject]) {
+            val obj = elem.asInstanceOf[JsObject]
+            //iterate into each pair element of one exactMatch
+            val mp = for ((field, value) <- obj.value) yield (field -> value)
 
-              val obj = elem.asInstanceOf[JsObject]
-              //iterate into each pair element of one exactMatch
-              for (elem2 <- obj.value) {
-                //the first element is the tag that will appear in the page
-                //The secod element can be a string or a array
-                if (elem2._2.isInstanceOf[JsString]) {
-                  //If is a String we check is if a url or a literal
-                  if (elem2._2.toString().replace("\"", "").startsWith("http://")) {
-                    mapMatch += elem2._1 -> List(List("Resource", elem2._2.toString().replace("\"", "")))
-                  } else {
-                    mapMatch += elem2._1 -> List(List("Literal", elem2._2.toString().replace("\"", "")))
-                  }
-                }
-                //If the second element is an Array we iterate over each element
-                if (elem2._2.isInstanceOf[JsArray]) {
-                  var list2 = for (arrayElem <- elem2._2.asInstanceOf[JsArray].value)
-                    yield (
-                    {
-                      var listType: String = ""
+            val dataset = mp("inDataset").as[String]
 
-                      if (arrayElem.toString().replace("\"", "").startsWith("http://")) {
-                        listType = "Resource"
-                      } else {
-                        listType = "Literal"
-                      }
-                      List(listType, arrayElem.toString().replace("\"", ""))
-                    })
-                  mapMatch += elem2._1 -> list2.toList
-                  //println(List(elem2._1,List("Resource",elem2._2)))
-                }
-
-              }
-            }
-            mapMatch
+            for ((field, value) <- mp.filter(elem => elem._1 != "inDataset"))
+              yield (value match {
+              case value: JsString => (dataset, field, value.value)
+              case value: JsArray => (dataset, field, ((value.value).map(v => v.as[String])).mkString(","))
+              case value: JsNumber => (dataset, field, value.value.toString())
+            })
           })
-        val total = Seq(firstelem) ++ res
-        total
-      } else {
-        Seq()
-      }
-
+        (firstelem ++ res.flatten).toList
+      } else
+        List()
     }
 
   //Given an compound identifier (concept wiki uri) returns information associated to the compound
   //calling the 
-  def GetCompoundInfo(compoundURI: String,coreAPIURL:String) =
+  def GetCompoundInfo(compoundURI: String, coreAPIURL: String): List[(String, String, String)] =
     {
       println("URI:" + compoundURI)
-      var urlcall = coreAPIURL+"/compound?uri=" + URLEncoder.encode(compoundURI, "UTF-8")
+      var urlcall = coreAPIURL + "/compound?uri=" + URLEncoder.encode(compoundURI, "UTF-8")
       var url = new URL(urlcall);
       var conn = url.openConnection().asInstanceOf[HttpURLConnection]
       conn.setRequestMethod("GET")
@@ -125,51 +119,26 @@ object OPSLDA {
         val inDataset = (json \ "result" \ "primaryTopic" \ "inDataset").as[String]
         val prefLabel = (json \ "result" \ "primaryTopic" \ "prefLabel").as[String]
         val exactMatch: JsArray = (json \ "result" \ "primaryTopic" \ "exactMatch").asInstanceOf[JsArray]
-        val firstelem = Map("_about" -> List(List("Resource", about)), "inDataset" -> List(List("Resource", inDataset)), "prefLabel" -> List(List("Literal", prefLabel)))
-        val res = for (elem <- exactMatch.value)
-          yield (
-          {
-            var mapMatch = Map[String, List[Object]]()
-            //elem is one exactMatch
-            if (elem.isInstanceOf[JsObject]) {
-              val obj = elem.asInstanceOf[JsObject]
-              //iterate into each pair element of one exactMatch
-              for (elem2 <- obj.value) {
-                //the first element is the tag that will appear in the page
-                //The secod element can be a string or a array
-                if (elem2._2.isInstanceOf[JsString]) {
-                  //If is a String we check is if a url or a literal
-                  if (elem2._2.toString().replace("\"", "").startsWith("http://")) {
-                    mapMatch += elem2._1 -> List(List("Resource", elem2._2.toString().replace("\"", "")))
-                  } else {
-                    mapMatch += elem2._1 -> List(List("Literal", elem2._2.toString().replace("\"", "")))
-                  }
-                }
-                //If the second element is an Array we iterate over each element
-                if (elem2._2.isInstanceOf[JsArray]) {
-                  var list2 = for (arrayElem <- elem2._2.asInstanceOf[JsArray].value)
-                    yield (
-                    {
-                      var listType: String = ""
-                      if (arrayElem.toString().replace("\"", "").startsWith("http://")) {
-                        listType = "Resource"
-                      } else {
-                        listType = "Literal"
-                      }
-                      List(listType, arrayElem.toString().replace("\"", ""))
-                    })
-                  mapMatch += elem2._1 -> list2.toList
-                  //println(List(elem2._1,List("Resource",elem2._2)))
-                }
-              }
-            }
-            mapMatch
+        //val firstelem = Map("_about" -> List(List("Resource", about)), "inDataset" -> List(List("Resource", inDataset)), "prefLabel" -> List(List("Literal", prefLabel)))
+        val firstelem = Seq((inDataset, "_about", about), (inDataset, "prefLabel", prefLabel))
+        val res = for (elem <- exactMatch.value if (elem.isInstanceOf[JsObject]))
+          yield ({
+          val obj = elem.asInstanceOf[JsObject]
+          //iterate into each pair element of one exactMatch
+          val mp = for ((field, value) <- obj.value) yield (field -> value)
+
+          val dataset = mp("inDataset").as[String]
+
+          for ((field, value) <- mp.filter(elem => elem._1 != "inDataset"))
+            yield (value match {
+            case value: JsString => (dataset, field, value.value)
+            case value: JsArray => (dataset, field, ((value.value).map(v => v.as[String])).mkString(","))
+            case value: JsNumber => (dataset, field, value.value.toString())
           })
-        val total = Seq(firstelem) ++ res
-        total
-      } else {
-        Map()
-      }
+        })
+        (firstelem ++ res.flatten).toList
+      } else
+        List()
     }
 
   def makeCall(call: String): String = {
@@ -184,7 +153,7 @@ object OPSLDA {
     writer.toString()
   }
 
-  def GetPharmacologyByTargets(targetCwikiID: String,coreAPIURL:String) =
+  def GetPharmacologyByTargets(targetCwikiID: String, coreAPIURL: String) =
     {
       def getActivityInfo(jsonActivity: JsValue): Map[String, String] = {
         val validTabs = Set("_about", "pmid", "relation", "standardUnits", "activity_value", "activity_type", "inDataset")
@@ -229,7 +198,7 @@ object OPSLDA {
         }
       }
 
-      val countCall = coreAPIURL+"/target/pharmacology/count?"
+      val countCall = coreAPIURL + "/target/pharmacology/count?"
       val pagescall = coreAPIURL + "/target/pharmacology/pages?"
 
       val paramsCalls = List("uri=" + URLEncoder.encode(targetCwikiID, "UTF-8"))
@@ -243,14 +212,14 @@ object OPSLDA {
 
       val validActivityTypes = Set("ec50", "ic50", "kd", "ki")
       //We have to parse the results
-      val  targetIds=List(targetCwikiID)
+      val targetIds = List(targetCwikiID)
       val annotationsArray = (for ((rs, targetId) <- (rsArray.toList, targetIds).zip) yield {
         val json = Json.parse(rs)
         //FIRST: we have to find the path result/items to obtain a list of activities
         val res = (json \ "result" \ "items") match {
           case activitiesArray: JsArray => {
             //for each activity
-           // println("activitiesArray LENGTH =" + activitiesArray.value.size)
+            // println("activitiesArray LENGTH =" + activitiesArray.value.size)
             val activitiesMolInfo = activitiesArray.value map (act => getMoleculeInfo(act \ "forMolecule" \ "exactMatch"))
             val activitiesInfo = activitiesArray.value map (act => getActivityInfo(act))
             //println("activitiesMolInfo[" + activitiesMolInfo.size + "] activitiesInfo[" + activitiesInfo.size + "]  targetIds.toList[" + targetIds.length + "]")
