@@ -1,7 +1,7 @@
 package LDA_API
 
-import java.util.{List=>JavaList}
-import java.util.{Map=>JavaMap}
+import java.util.{ List => JavaList }
+import java.util.{ Map => JavaMap }
 import collection.JavaConversions._
 import play.api.libs.ws.WS
 import java.io.File
@@ -31,31 +31,34 @@ import play.api.libs.json.JsUndefined
 import play.api.libs.json.JsNumber
 
 object OPSLDAJava {
-
-  def GetTargetInfo(targetURI: String, coreAPIURL: String): JavaList[(String, String, String)] = {
+  def GetTargetInfo(targetURI: String, coreAPIURL: String): JavaList[LDAInfo] = {
     OPSLDAScala.GetTargetInfo(targetURI, coreAPIURL)
   }
-  def GetCompoundInfo(compoundURI: String, coreAPIURL: String): JavaList[(String, String, String)] = {
+  def GetCompoundInfo(compoundURI: String, coreAPIURL: String): JavaList[LDAInfo] = {
     OPSLDAScala.GetCompoundInfo(compoundURI, coreAPIURL)
   }
-  def GetPharmacologyByTargets(targetCwikiID: String, coreAPIURL: String): JavaList[JavaMap[String,String]]={
-    def convert(targetMap: Map[String,String]):JavaMap[String,String] ={
-      collection.mutable.Map(targetMap.toSeq: _*) 
+  def GetPharmacologyByTarget(targetCwikiID: String, coreAPIURL: String): JavaList[JavaMap[String, String]] = {
+    def convert(targetMap: Map[String, String]): JavaMap[String, String] = {
+      collection.mutable.Map(targetMap.toSeq: _*)
     }
-    val res = OPSLDAScala.GetPharmacologyByTargets(targetCwikiID,coreAPIURL)
-    res.map(convert )
+    val res = OPSLDAScala.GetPharmacologyByTarget(targetCwikiID, coreAPIURL)
+    res.map(convert)
   }
-
-  
+ def GetPharmacologyByCompound(compoundCwikiID: String, coreAPIURL: String):JavaList[JavaMap[String, String]]  ={
+     def convert(targetMap: Map[String, String]): JavaMap[String, String] = {
+      collection.mutable.Map(targetMap.toSeq: _*)
+    }
+   OPSLDAScala.GetPharmacologyByCompound(compoundCwikiID,coreAPIURL).map(convert)
+ }
 }
 
 object OPSLDAScala {
 
   //Given an target identifier (concept wiki uri) returns information associated to the target
   //calling the 
-  def GetTargetInfo(targetURI: String, coreAPIURL: String): List[(String, String, String)] =
+  def GetTargetInfo(targetURI: String, coreAPIURL: String): List[LDAInfo] =
     {
-      println("URI:" + targetURI)
+      //println("URI:" + targetURI)
       var urlcall = coreAPIURL + "/target?uri=" + URLEncoder.encode(targetURI, "UTF-8")
       var url = new URL(urlcall);
       var conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -73,7 +76,7 @@ object OPSLDAScala {
         val prefLabel = (json \ "result" \ "primaryTopic" \ "prefLabel").as[String]
         val exactMatch: JsArray = (json \ "result" \ "primaryTopic" \ "exactMatch").asInstanceOf[JsArray]
         //val firstelem = Map("_about" -> List(List("Resource", about)), "inDataset" -> List(List("Resource", inDataset)), "prefLabel" -> List(List("Literal", prefLabel)))
-        val firstelem = Seq((inDataset, "_about", about), (inDataset, "prefLabel", prefLabel))
+        val firstelem = Seq(new LDAInfo(inDataset, "_about", about), new LDAInfo(inDataset, "prefLabel", prefLabel))
         val res = for (elem <- exactMatch.value if (elem.isInstanceOf[JsObject]))
           yield (
           {
@@ -85,9 +88,9 @@ object OPSLDAScala {
 
             for ((field, value) <- mp.filter(elem => elem._1 != "inDataset"))
               yield (value match {
-              case value: JsString => (dataset, field, value.value)
-              case value: JsArray => (dataset, field, ((value.value).map(v => v.as[String])).mkString(","))
-              case value: JsNumber => (dataset, field, value.value.toString())
+              case value: JsString => new LDAInfo(dataset, field, value.value)
+              case value: JsArray => new LDAInfo(dataset, field, ((value.value).map(v => v.as[String])).mkString(","))
+              case value: JsNumber => new LDAInfo(dataset, field, value.value.toString())
             })
           })
         (firstelem ++ res.flatten).toList
@@ -97,9 +100,9 @@ object OPSLDAScala {
 
   //Given an compound identifier (concept wiki uri) returns information associated to the compound
   //calling the 
-  def GetCompoundInfo(compoundURI: String, coreAPIURL: String): List[(String, String, String)] =
+  def GetCompoundInfo(compoundURI: String, coreAPIURL: String): List[LDAInfo] =
     {
-      println("URI:" + compoundURI)
+      //println("URI:" + compoundURI)
       var urlcall = coreAPIURL + "/compound?uri=" + URLEncoder.encode(compoundURI, "UTF-8")
       var url = new URL(urlcall);
       var conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -120,7 +123,7 @@ object OPSLDAScala {
         val prefLabel = (json \ "result" \ "primaryTopic" \ "prefLabel").as[String]
         val exactMatch: JsArray = (json \ "result" \ "primaryTopic" \ "exactMatch").asInstanceOf[JsArray]
         //val firstelem = Map("_about" -> List(List("Resource", about)), "inDataset" -> List(List("Resource", inDataset)), "prefLabel" -> List(List("Literal", prefLabel)))
-        val firstelem = Seq((inDataset, "_about", about), (inDataset, "prefLabel", prefLabel))
+        val firstelem = Seq(new LDAInfo(inDataset, "_about", about), new LDAInfo(inDataset, "prefLabel", prefLabel))
         val res = for (elem <- exactMatch.value if (elem.isInstanceOf[JsObject]))
           yield ({
           val obj = elem.asInstanceOf[JsObject]
@@ -131,9 +134,9 @@ object OPSLDAScala {
 
           for ((field, value) <- mp.filter(elem => elem._1 != "inDataset"))
             yield (value match {
-            case value: JsString => (dataset, field, value.value)
-            case value: JsArray => (dataset, field, ((value.value).map(v => v.as[String])).mkString(","))
-            case value: JsNumber => (dataset, field, value.value.toString())
+            case value: JsString => new LDAInfo(dataset, field, value.value)
+            case value: JsArray => new LDAInfo(dataset, field, ((value.value).map(v => v.as[String])).mkString(","))
+            case value: JsNumber => new LDAInfo(dataset, field, value.value.toString())
           })
         })
         (firstelem ++ res.flatten).toList
@@ -153,7 +156,7 @@ object OPSLDAScala {
     writer.toString()
   }
 
-  def GetPharmacologyByTargets(targetCwikiID: String, coreAPIURL: String) =
+  def GetPharmacologyByTarget(targetCwikiID: String, coreAPIURL: String) =
     {
       def getActivityInfo(jsonActivity: JsValue): Map[String, String] = {
         val validTabs = Set("_about", "pmid", "relation", "standardUnits", "activity_value", "activity_type", "inDataset")
@@ -238,4 +241,60 @@ object OPSLDAScala {
       annotationsArray.toList
     }
 
+  def GetPharmacologyByCompound(compoundCwikiID: String, coreAPIURL: String) =
+    {
+      var targetsChemblToCW = Map[String, Map[String, String]]()
+      def getTargetPharmInfo(jsonTargets: JsValue): List[String] = {
+        jsonTargets match {
+          case concatenatedURIs: JsString => (concatenatedURIs.value split (",")).toList
+          case _ => List()
+        }
+      }
+
+      def getActivityInfo(jsonActivity: JsValue): Map[String, String] = {
+        val validTabs = Set("_about", "pmid", "relation", "standardUnits", "activity_value", "activity_type", "inDataset")
+        (for (
+          (campo, valor) <- jsonActivity.asInstanceOf[JsObject].fields if validTabs.contains(campo)
+        ) yield {
+          campo match {
+            case "_about" => ("_aboutActivity", valor.as[String])
+            case "activity_value" => (campo, valor.as[Double].toString)
+            case _ => (campo, valor.as[String])
+          }
+        }).toMap
+      }
+      val countCall = "http://api.openphacts.org/compound/pharmacology/count?"
+      val pagescall = "http://api.openphacts.org/compound/pharmacology/pages?"
+
+      val paramsCalls = List("uri=" + URLEncoder.encode(compoundCwikiID, "UTF-8"))
+
+      //We obtain the count of each of the queries
+      val rsCountArray = for (urlparams <- paramsCalls) yield makeCall(countCall + urlparams)
+      val counts = rsCountArray.map(s => (Json.parse(s) \ "result" \ "primaryTopic" \ "compoundPharmacologyTotalResults").as[Int])
+
+      //we have a call for each target, we send all of then in paral.lel 
+      val rsArray = for (urlparams <- (paramsCalls zip counts).map(elem => elem._1 + "&_pageSize=" + elem._2.toString()).par)
+        yield makeCall(pagescall + urlparams)
+
+      val validActivityTypes = Set("ec50", "ic50", "kd", "ki")
+      //We have to parse the results
+      val annotationsArray = (for ((rs, ligandId) <- (rsArray.toList, List(compoundCwikiID)).zip) yield {
+        val json = Json.parse(rs)
+        //FIRST: we have to find the path result/items to obtain a list of activities
+        val res = (json \ "result" \ "items") match {
+          case activitiesArray: JsArray => {
+            //for each activity
+            for (
+              (activityJsValue, activityMap) <- (activitiesArray.value, (activitiesArray.value map getActivityInfo)).zip;
+              target <- getTargetPharmInfo((activityJsValue \ "onAssay" \ "target" \ "concatenatedURIs")) if ((activityMap.keys).contains("activity_type")
+                && validActivityTypes.contains(activityMap("activity_type").toLowerCase())
+                && (activityMap.keys).contains("activity_value"))
+            ) yield (Map("moleculeId" -> ligandId,"targetId"-> target) ++ activityMap)
+          }
+          case _ => List()
+        }
+        res
+      }).flatten
+      annotationsArray.toList
+    }
 }
