@@ -31,10 +31,10 @@ object OPSLDA {
 
   //Given an target identifier (concept wiki uri) returns information associated to the target
   //calling the 
-  def GetTargetInfo(targetURI: String):Seq[Map[String,List[AnyRef]]]=
+  def GetTargetInfo(targetURI: String,coreAPIURL:String): Seq[Map[String, List[AnyRef]]] =
     {
       println("URI:" + targetURI)
-      var urlcall = "http://api.openphacts.org/target?uri=" + URLEncoder.encode(targetURI, "UTF-8")
+      var urlcall = coreAPIURL+"/target?uri=" + URLEncoder.encode(targetURI, "UTF-8")
       var url = new URL(urlcall);
       var conn = url.openConnection().asInstanceOf[HttpURLConnection]
       conn.setRequestMethod("GET")
@@ -103,10 +103,10 @@ object OPSLDA {
 
   //Given an compound identifier (concept wiki uri) returns information associated to the compound
   //calling the 
-  def GetCompoundInfo(compoundURI: String) =
+  def GetCompoundInfo(compoundURI: String,coreAPIURL:String) =
     {
       println("URI:" + compoundURI)
-      var urlcall = "http://api.openphacts.org/compound?uri=" + URLEncoder.encode(compoundURI, "UTF-8")
+      var urlcall = coreAPIURL+"/compound?uri=" + URLEncoder.encode(compoundURI, "UTF-8")
       var url = new URL(urlcall);
       var conn = url.openConnection().asInstanceOf[HttpURLConnection]
       conn.setRequestMethod("GET")
@@ -172,34 +172,6 @@ object OPSLDA {
       }
     }
 
-  def getFilters(jsonFilters: JsValue): String = {
-    def readFilter(filter: JsValue): String = {
-      (filter \ "type").as[String] match {
-        case "value" => {
-          val filteroperator = (filter \ "operator").as[String]
-          val fvalue = (filter \ "value").as[Float]
-          if (filteroperator.equals(">")) "&min-activity_value=" + fvalue
-          else "&max-activity_value=" + fvalue
-        }
-        case "organism" => {
-          val filtervalue = (filter \ "value").as[String]
-          "&assay_organism=" + filtervalue
-        }
-        case "type" => {
-          val filtervalue = (filter \ "value").as[String]
-          "&activity_type=" + filtervalue
-        }
-      }
-    }
-
-    jsonFilters match {
-      case filters: JsArray => {
-        (filters.value map readFilter).mkString
-      }
-      case _ => ""
-    }
-  }
-
   def makeCall(call: String): String = {
     println("[" + call + "]")
     val url = new URL(call);
@@ -212,7 +184,7 @@ object OPSLDA {
     writer.toString()
   }
 
-  def GetPharmacologyByTargets(jsonParams: JsValue) =
+  def GetPharmacologyByTargets(targetCwikiID: String,coreAPIURL:String) =
     {
       def getActivityInfo(jsonActivity: JsValue): Map[String, String] = {
         val validTabs = Set("_about", "pmid", "relation", "standardUnits", "activity_value", "activity_type", "inDataset")
@@ -257,26 +229,12 @@ object OPSLDA {
         }
       }
 
-      val countCall = "http://api.openphacts.org/target/pharmacology/count?"
-      val pagescall = "http://api.openphacts.org/target/pharmacology/pages?"
+      val countCall = coreAPIURL+"/target/pharmacology/count?"
+      val pagescall = coreAPIURL + "/target/pharmacology/pages?"
 
-      val generalFilters = getFilters((jsonParams \ "filters"))
-
-      //We parse the json input to find the targets and the filters for each target
-      val (targetIds, paramsCalls) = (jsonParams \ "targets") match {
-        case targets: JsArray => {
-          (for (target <- targets.value.par) yield {
-            val targetId = (target \ "id").as[String]
-            //println("TARGET["+targetId+"]")
-            val params = "_orderBy=?inchi_key&uri=" + URLEncoder.encode("http://www.conceptwiki.org/concept/", "UTF-8") + targetId + getFilters(target \ "filters") + generalFilters
-            (targetId, params)
-          }).unzip
-        }
-        case _ => (Seq(), Seq())
-      }
-
+      val paramsCalls = List("uri=" + URLEncoder.encode(targetCwikiID, "UTF-8"))
       //We obtain the count of each of the queries
-      val rsCountArray = for (urlparams <- paramsCalls.par) yield makeCall(countCall + urlparams)
+      val rsCountArray = for (urlparams <- paramsCalls) yield makeCall(countCall + urlparams)
       val counts = rsCountArray.map(s => (Json.parse(s) \ "result" \ "primaryTopic" \ "targetPharmacologyTotalResults").as[Int])
 
       //we have a call for each target, we send all of then in paral.lel 
@@ -285,16 +243,17 @@ object OPSLDA {
 
       val validActivityTypes = Set("ec50", "ic50", "kd", "ki")
       //We have to parse the results
-      val annotationsArray = (for ((rs, targetId) <- (rsArray.toList, targetIds.toList).zip) yield {
+      val  targetIds=List(targetCwikiID)
+      val annotationsArray = (for ((rs, targetId) <- (rsArray.toList, targetIds).zip) yield {
         val json = Json.parse(rs)
         //FIRST: we have to find the path result/items to obtain a list of activities
         val res = (json \ "result" \ "items") match {
           case activitiesArray: JsArray => {
             //for each activity
-            println("activitiesArray LENGTH =" + activitiesArray.value.size)
+           // println("activitiesArray LENGTH =" + activitiesArray.value.size)
             val activitiesMolInfo = activitiesArray.value map (act => getMoleculeInfo(act \ "forMolecule" \ "exactMatch"))
             val activitiesInfo = activitiesArray.value map (act => getActivityInfo(act))
-            println("activitiesMolInfo[" + activitiesMolInfo.size + "] activitiesInfo[" + activitiesInfo.size + "]  targetIds.toList[" + (targetIds.toList).length + "]")
+            //println("activitiesMolInfo[" + activitiesMolInfo.size + "] activitiesInfo[" + activitiesInfo.size + "]  targetIds.toList[" + targetIds.length + "]")
             for (
               (part1, part2) <- (activitiesMolInfo, activitiesInfo).zip if ((part2.keys).contains("activity_type")
                 && validActivityTypes.contains(part2("activity_type").toLowerCase())
