@@ -64,8 +64,10 @@ object ConceptWikiDataAccess {
     OPSAPI_call(parameters, conceptwikiURL+"/web-ws/concept/search/byTag/")
   }
   
-  def CW_Search_Protein(q:String,concepwikiURL:String)= {
-    process_matches(CW_Search_Protein_RAW(q,concepwikiURL))
+  def CW_Search_Protein(q:String,conceptwikiURL:String)= {
+    val r= CW_Search_Protein_RAW(q,conceptwikiURL)
+    println(r)
+    process_matches(r)
   }
 
   private def CW_Search_Compound_RAW(q:String,concepwikiURL:String)= {

@@ -173,7 +173,7 @@ object OPSLDA {
     }
 
   def makeCall(call: String): String = {
-    println("[" + call + "]")
+    //println("[" + call + "]")
     val url = new URL(call);
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod("GET")
