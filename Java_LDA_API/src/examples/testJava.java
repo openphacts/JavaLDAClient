@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-//import scala.Tuple3;
+import scala.Tuple3;
 import LDA_API.ConceptWikiDataAccessJava;
 import LDA_API.OPSLDAJava;
 import LDA_API.LDAInfo; 
